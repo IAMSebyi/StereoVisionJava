@@ -214,3 +214,27 @@ Workflow:
 - it does not include full stereo calibration
 - 3D reconstruction is relative, not guaranteed metric
 - results are better for approximately rectified stereo images
+
+
+## Stage II additions
+
+This version includes:
+- SQLite persistence through JDBC
+- generic singleton database services for reading and writing (`DatabaseReadService`, `DatabaseWriteService`)
+- CRUD repositories for `StereoProject`, `StereoImagePair`, `CameraParameters`, and `ReconstructionSession`
+- CSV audit logging through `AuditService`
+
+### Extra dependency
+Add `sqlite-jdbc` to your project classpath in addition to the OpenCV Java jar.
+
+### Optional VM / system properties
+- `-Dstereovision.db.path=stereo_vision.db`
+- `-Dstereovision.audit.path=audit.csv`
+
+### Database and audit outputs
+When the application starts, it creates the SQLite tables automatically if they do not already exist.
+The audit file is created automatically with the header:
+
+```csv
+nume_actiune,timestamp
+```

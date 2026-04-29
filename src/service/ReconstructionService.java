@@ -7,6 +7,7 @@ import org.opencv.core.Mat;
 import stereovision.algorithm.StereoBMAlgorithm;
 import stereovision.algorithm.StereoMatcherAlgorithm;
 import stereovision.algorithm.StereoSGBMAlgorithm;
+import stereovision.config.DatabaseInitializer;
 import stereovision.model.CameraParameters;
 import stereovision.model.DepthMapResult;
 import stereovision.model.DisparityMapResult;
@@ -15,6 +16,8 @@ import stereovision.model.ReconstructionSession;
 import stereovision.model.ReconstructionStats;
 import stereovision.model.StereoImagePair;
 import stereovision.model.StereoProject;
+import stereovision.repository.CameraParametersRepository;
+import stereovision.repository.ReconstructionSessionRepository;
 import stereovision.util.ExifCameraEstimator;
 import stereovision.util.ImageUtils;
 
@@ -23,6 +26,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -30,15 +34,18 @@ public class ReconstructionService {
     private final List<StereoMatcherAlgorithm> availableAlgorithms;
     private final Map<String, StereoMatcherAlgorithm> algorithmsByName;
     private final ExportService exportService;
-    private int nextSessionId;
-    private int nextResultId;
+    private final ReconstructionSessionRepository sessionRepository;
+    private final CameraParametersRepository cameraParametersRepository;
+    private final AuditService auditService;
 
     public ReconstructionService() {
+        DatabaseInitializer.initialize();
         this.availableAlgorithms = new ArrayList<>();
         this.algorithmsByName = new HashMap<>();
         this.exportService = new ExportService();
-        this.nextSessionId = 1;
-        this.nextResultId = 1;
+        this.sessionRepository = new ReconstructionSessionRepository();
+        this.cameraParametersRepository = new CameraParametersRepository();
+        this.auditService = AuditService.getInstance();
 
         registerAlgorithm(new StereoBMAlgorithm());
         registerAlgorithm(new StereoSGBMAlgorithm());
@@ -85,6 +92,7 @@ public class ReconstructionService {
                     pair.getImageWidth(),
                     pair.getImageHeight()
             );
+            cameraParametersRepository.upsert(project.getId(), cameraParameters);
             project.setCameraParameters(cameraParameters);
         }
 
@@ -115,7 +123,7 @@ public class ReconstructionService {
         Core.MinMaxLocResult depthMinMax = Core.minMaxLoc(depthFloat);
 
         DisparityMapResult disparityResult = new DisparityMapResult(
-                nextResultId++,
+                0,
                 pair.getId(),
                 algorithm.getAlgorithmName(),
                 disparityPath,
@@ -124,7 +132,7 @@ public class ReconstructionService {
         );
 
         DepthMapResult depthResult = new DepthMapResult(
-                nextResultId++,
+                0,
                 pair.getId(),
                 depthPath,
                 true,
@@ -132,7 +140,7 @@ public class ReconstructionService {
                 depthMinMax.maxVal
         );
 
-        ReconstructionSession session = new ReconstructionSession(nextSessionId++, project.getId(), pair.getId(), algorithm.getAlgorithmName());
+        ReconstructionSession session = new ReconstructionSession(0, project.getId(), pair.getId(), algorithm.getAlgorithmName());
         session.setDisparityResult(disparityResult);
         session.setDepthResult(depthResult);
         session.setDisparityOutputPath(disparityPath);
@@ -144,8 +152,28 @@ public class ReconstructionService {
         session.setPoints(new ArrayList<>(sortedPoints));
         session.setStats(stats);
 
+        sessionRepository.create(session);
         project.addSession(session);
+        auditService.logAction("run_reconstruction_" + algorithm.getAlgorithmName().toLowerCase());
         return session;
+    }
+
+    public List<ReconstructionSession> getSessionsForProject(int projectId) {
+        return sessionRepository.readByProjectId(projectId);
+    }
+
+    public Optional<ReconstructionSession> getSessionById(int sessionId) {
+        return sessionRepository.read(sessionId);
+    }
+
+    public void updateSession(ReconstructionSession session) {
+        sessionRepository.update(session);
+    }
+
+    public void deleteSession(StereoProject project, int sessionId) {
+        sessionRepository.delete(sessionId);
+        project.getSessions().removeIf(session -> session.getId() == sessionId);
+        auditService.logAction("delete_reconstruction_session");
     }
 
     private Mat computeRelativeDepth(Mat disparityFloat) {

@@ -199,3 +199,5 @@ README.html
 *.iml
 .idea
 .exercism
+stereo_vision.db
+audit.csv

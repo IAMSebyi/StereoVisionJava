@@ -6,6 +6,7 @@ import stereovision.model.CameraParameters;
 import stereovision.model.ReconstructionSession;
 import stereovision.model.StereoImagePair;
 import stereovision.model.StereoProject;
+import stereovision.service.AuditService;
 import stereovision.service.ProjectService;
 import stereovision.service.ReconstructionService;
 
@@ -15,6 +16,7 @@ import java.util.Scanner;
 public class Main {
     private static final ProjectService projectService = new ProjectService();
     private static final ReconstructionService reconstructionService = new ReconstructionService();
+    private static final AuditService auditService = AuditService.getInstance();
     private static final Scanner scanner = new Scanner(System.in);
 
     public static void main(String[] args) {
@@ -41,14 +43,20 @@ public class Main {
                 switch (option) {
                     case 1 -> createProject();
                     case 2 -> listProjects();
-                    case 3 -> addStereoPair();
-                    case 4 -> configureCameraParameters();
-                    case 5 -> listPairs();
-                    case 6 -> showAlgorithms();
-                    case 7 -> runReconstruction("StereoBM");
-                    case 8 -> runReconstruction("StereoSGBM");
-                    case 9 -> showProjectSessions();
-                    case 10 -> running = false;
+                    case 3 -> updateProject();
+                    case 4 -> deleteProject();
+                    case 5 -> addStereoPair();
+                    case 6 -> updateStereoPair();
+                    case 7 -> deleteStereoPair();
+                    case 8 -> configureCameraParameters();
+                    case 9 -> deleteCameraParameters();
+                    case 10 -> listPairs();
+                    case 11 -> showAlgorithms();
+                    case 12 -> runReconstruction("StereoBM");
+                    case 13 -> runReconstruction("StereoSGBM");
+                    case 14 -> showProjectSessions();
+                    case 15 -> deleteReconstructionSession();
+                    case 16 -> running = false;
                     default -> System.out.println("Invalid option.");
                 }
             } catch (RuntimeException exception) {
@@ -64,14 +72,20 @@ public class Main {
         System.out.println("=== Stereo Vision 3D Reconstruction System ===");
         System.out.println("1. Create stereo project");
         System.out.println("2. List projects");
-        System.out.println("3. Add stereo pair");
-        System.out.println("4. Configure camera parameters");
-        System.out.println("5. List stereo pairs for a project");
-        System.out.println("6. Show available algorithms");
-        System.out.println("7. Run reconstruction with StereoBM");
-        System.out.println("8. Run reconstruction with StereoSGBM");
-        System.out.println("9. Show project sessions");
-        System.out.println("10. Exit");
+        System.out.println("3. Update project");
+        System.out.println("4. Delete project");
+        System.out.println("5. Add stereo pair");
+        System.out.println("6. Update stereo pair");
+        System.out.println("7. Delete stereo pair");
+        System.out.println("8. Configure camera parameters");
+        System.out.println("9. Delete camera parameters");
+        System.out.println("10. List stereo pairs for a project");
+        System.out.println("11. Show available algorithms");
+        System.out.println("12. Run reconstruction with StereoBM");
+        System.out.println("13. Run reconstruction with StereoSGBM");
+        System.out.println("14. Show project sessions");
+        System.out.println("15. Delete reconstruction session");
+        System.out.println("16. Exit");
     }
 
     private static void createProject() {
@@ -86,6 +100,7 @@ public class Main {
 
     private static void listProjects() {
         List<StereoProject> projects = projectService.getProjects();
+        auditService.logAction("list_projects");
         if (projects.isEmpty()) {
             System.out.println("No projects exist.");
             return;
@@ -102,6 +117,22 @@ public class Main {
         }
     }
 
+    private static void updateProject() {
+        int projectId = readInt("Project ID: ");
+        System.out.print("New project name: ");
+        String name = scanner.nextLine();
+        System.out.print("New project description: ");
+        String description = scanner.nextLine();
+        StereoProject project = projectService.updateProject(projectId, name, description);
+        System.out.println("Updated project: " + project);
+    }
+
+    private static void deleteProject() {
+        int projectId = readInt("Project ID: ");
+        projectService.deleteProject(projectId);
+        System.out.println("Project deleted.");
+    }
+
     private static void addStereoPair() {
         int projectId = readInt("Project ID: ");
         System.out.print("Pair label: ");
@@ -114,6 +145,27 @@ public class Main {
         StereoImagePair pair = projectService.addStereoPair(projectId, label, leftPath, rightPath);
         System.out.println("Added pair: " + pair);
         System.out.println("Camera parameters: " + projectService.getProjectById(projectId).getCameraParameters());
+    }
+
+    private static void updateStereoPair() {
+        int projectId = readInt("Project ID: ");
+        int pairId = readInt("Pair ID: ");
+        System.out.print("New pair label: ");
+        String label = scanner.nextLine();
+        System.out.print("New left image path: ");
+        String leftPath = scanner.nextLine();
+        System.out.print("New right image path: ");
+        String rightPath = scanner.nextLine();
+
+        StereoImagePair pair = projectService.updateStereoPair(projectId, pairId, label, leftPath, rightPath);
+        System.out.println("Updated pair: " + pair);
+    }
+
+    private static void deleteStereoPair() {
+        int projectId = readInt("Project ID: ");
+        int pairId = readInt("Pair ID: ");
+        projectService.deleteStereoPair(projectId, pairId);
+        System.out.println("Stereo pair deleted.");
     }
 
     private static void configureCameraParameters() {
@@ -129,9 +181,16 @@ public class Main {
         System.out.println("Camera parameters were updated.");
     }
 
+    private static void deleteCameraParameters() {
+        int projectId = readInt("Project ID: ");
+        projectService.deleteCameraParameters(projectId);
+        System.out.println("Camera parameters deleted.");
+    }
+
     private static void listPairs() {
         int projectId = readInt("Project ID: ");
         List<StereoImagePair> pairs = projectService.getPairsForProject(projectId);
+        auditService.logAction("list_stereo_pairs");
         if (pairs.isEmpty()) {
             System.out.println("The project has no stereo pairs.");
             return;
@@ -143,6 +202,7 @@ public class Main {
     }
 
     private static void showAlgorithms() {
+        auditService.logAction("show_available_algorithms");
         for (StereoMatcherAlgorithm algorithm : reconstructionService.getAvailableAlgorithms()) {
             System.out.println(algorithm);
         }
@@ -164,15 +224,24 @@ public class Main {
 
     private static void showProjectSessions() {
         int projectId = readInt("Project ID: ");
-        StereoProject project = projectService.getProjectById(projectId);
-        if (project.getSessions().isEmpty()) {
+        List<ReconstructionSession> sessions = projectService.getSessionsForProject(projectId);
+        auditService.logAction("show_project_sessions");
+        if (sessions.isEmpty()) {
             System.out.println("No reconstruction sessions exist for this project.");
             return;
         }
 
-        for (ReconstructionSession session : project.getSessions()) {
+        for (ReconstructionSession session : sessions) {
             System.out.println(session);
         }
+    }
+
+    private static void deleteReconstructionSession() {
+        int projectId = readInt("Project ID: ");
+        int sessionId = readInt("Session ID: ");
+        StereoProject project = projectService.getProjectById(projectId);
+        reconstructionService.deleteSession(project, sessionId);
+        System.out.println("Reconstruction session deleted.");
     }
 
     private static int readInt(String prompt) {
@@ -214,6 +283,7 @@ public class Main {
             StereoProject project = projectService.createProject("command-line-run", "Stereo pair reconstruction from CLI");
             StereoImagePair pair = projectService.addStereoPair(project.getId(), "input-pair", leftImagePath, rightImagePath);
             ReconstructionSession session = reconstructionService.runReconstruction(project, pair, algorithmName, outputDirectory);
+            auditService.logAction("command_line_run");
 
             System.out.println("Reconstruction complete.");
             System.out.println("Camera parameters: " + project.getCameraParameters());
@@ -231,6 +301,6 @@ public class Main {
 
     private static void printCommandLineUsage() {
         System.out.println("Usage:");
-        System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>\" stereovision.Main <left-image> <right-image> [output-dir] [StereoBM|StereoSGBM]");
+        System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main <left-image> <right-image> [output-dir] [StereoBM|StereoSGBM]");
     }
 }
