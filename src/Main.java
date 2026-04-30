@@ -2,6 +2,7 @@ package stereovision;
 
 import stereovision.algorithm.StereoMatcherAlgorithm;
 import stereovision.config.OpenCVLoader;
+import stereovision.gui.StereoVisionDemoFrame;
 import stereovision.model.CameraParameters;
 import stereovision.model.ReconstructionSession;
 import stereovision.model.StereoImagePair;
@@ -10,6 +11,9 @@ import stereovision.service.AuditService;
 import stereovision.service.ProjectService;
 import stereovision.service.ReconstructionService;
 
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import java.util.List;
 import java.util.Scanner;
 
@@ -20,20 +24,86 @@ public class Main {
     private static final Scanner scanner = new Scanner(System.in);
 
     public static void main(String[] args) {
+        if (args.length == 0 || isGuiFlag(args)) {
+            launchGui();
+            return;
+        }
+
+        if (!loadOpenCv(false)) {
+            return;
+        }
+
+        if (isInteractiveCliFlag(args)) {
+            runInteractiveConsole();
+            return;
+        }
+
+        runFromCommandLine(args);
+    }
+
+    private static boolean isGuiFlag(String[] args) {
+        return args.length == 1 && "--gui".equalsIgnoreCase(args[0]);
+    }
+
+    private static boolean isInteractiveCliFlag(String[] args) {
+        return args.length == 1 && "--cli".equalsIgnoreCase(args[0]);
+    }
+
+    private static void launchGui() {
+        applySystemLookAndFeel();
+        if (!loadOpenCv(true)) {
+            return;
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            try {
+                StereoVisionDemoFrame frame = new StereoVisionDemoFrame();
+                frame.setVisible(true);
+            } catch (RuntimeException exception) {
+                showGuiStartupError("Could not start the GUI.", exception);
+            }
+        });
+    }
+
+    private static boolean loadOpenCv(boolean showDialog) {
         try {
             OpenCVLoader.load();
+            return true;
         } catch (UnsatisfiedLinkError error) {
             System.err.println("Could not load the OpenCV native library.");
             System.err.println("Check java.library.path and make sure OpenCV Java is installed correctly.");
             System.err.println(error.getMessage());
-            return;
+            if (showDialog) {
+                JOptionPane.showMessageDialog(
+                        null,
+                        "Could not load the OpenCV native library.\nCheck java.library.path and your OpenCV installation.\n" + error.getMessage(),
+                        "Stereo Vision GUI",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+            return false;
         }
+    }
 
-        if (args.length > 0) {
-            runFromCommandLine(args);
-            return;
+    private static void applySystemLookAndFeel() {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception ignored) {
         }
+    }
 
+    private static void showGuiStartupError(String message, Throwable error) {
+        System.err.println(message);
+        error.printStackTrace(System.err);
+        JOptionPane.showMessageDialog(
+                null,
+                message + "\n" + error.getMessage(),
+                "Stereo Vision GUI",
+                JOptionPane.ERROR_MESSAGE
+        );
+    }
+
+    private static void runInteractiveConsole() {
         boolean running = true;
         while (running) {
             printMenu();
@@ -301,6 +371,8 @@ public class Main {
 
     private static void printCommandLineUsage() {
         System.out.println("Usage:");
+        System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main");
+        System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main --cli");
         System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main <left-image> <right-image> [output-dir] [StereoBM|StereoSGBM]");
     }
 }
