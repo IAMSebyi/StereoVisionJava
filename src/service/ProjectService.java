@@ -6,6 +6,7 @@ import stereovision.model.CameraParameters;
 import stereovision.model.ReconstructionSession;
 import stereovision.model.StereoImagePair;
 import stereovision.model.StereoProject;
+import stereovision.model.UserAccount;
 import stereovision.repository.CameraParametersRepository;
 import stereovision.repository.ReconstructionSessionRepository;
 import stereovision.repository.StereoImagePairRepository;
@@ -13,6 +14,7 @@ import stereovision.repository.StereoProjectRepository;
 import stereovision.util.ExifCameraEstimator;
 import stereovision.util.ImageUtils;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +23,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 public class ProjectService {
+    private final UserAccount currentUser;
     private final List<StereoProject> projects;
     private final Map<Integer, StereoProject> projectsById;
     private final SortedSet<StereoProject> sortedProjects;
@@ -30,8 +33,9 @@ public class ProjectService {
     private final ReconstructionSessionRepository sessionRepository;
     private final AuditService auditService;
 
-    public ProjectService() {
+    public ProjectService(UserAccount currentUser) {
         DatabaseInitializer.initialize();
+        this.currentUser = currentUser;
         this.projects = new ArrayList<>();
         this.projectsById = new HashMap<>();
         this.sortedProjects = new TreeSet<>();
@@ -48,7 +52,7 @@ public class ProjectService {
         projectsById.clear();
         sortedProjects.clear();
 
-        for (StereoProject project : projectRepository.readAll()) {
+        for (StereoProject project : projectRepository.readAllByUserId(currentUser.getId())) {
             cameraParametersRepository.readByProjectId(project.getId()).ifPresent(project::setCameraParameters);
             project.setImagePairs(new ArrayList<>(pairRepository.readByProjectId(project.getId())));
             project.setSessions(new ArrayList<>(sessionRepository.readByProjectId(project.getId())));
@@ -59,7 +63,7 @@ public class ProjectService {
     }
 
     public StereoProject createProject(String name, String description) {
-        StereoProject project = new StereoProject(0, name, description);
+        StereoProject project = new StereoProject(0, currentUser.getId(), name, description);
         projectRepository.create(project);
         projects.add(project);
         projectsById.put(project.getId(), project);
@@ -200,5 +204,13 @@ public class ProjectService {
 
     public List<ReconstructionSession> getSessionsForProject(int projectId) {
         return new ArrayList<>(getProjectById(projectId).getSessions());
+    }
+
+    public UserAccount getCurrentUser() {
+        return currentUser;
+    }
+
+    public String getDefaultOutputDirectory() {
+        return new File("output", currentUser.getUsername()).getPath();
     }
 }

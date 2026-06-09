@@ -4,6 +4,7 @@ import stereovision.model.CameraParameters;
 import stereovision.model.ReconstructionSession;
 import stereovision.model.StereoImagePair;
 import stereovision.model.StereoProject;
+import stereovision.model.UserAccount;
 import stereovision.service.ProjectService;
 import stereovision.service.ReconstructionService;
 
@@ -50,6 +51,7 @@ public class StereoVisionDemoFrame extends JFrame {
     private static final DateTimeFormatter STATUS_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final DateTimeFormatter SESSION_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    private final UserAccount currentUser;
     private final ProjectService projectService;
     private final ReconstructionService reconstructionService;
 
@@ -75,7 +77,7 @@ public class StereoVisionDemoFrame extends JFrame {
     private final JTextField baselineField = new JTextField(12);
     private final JCheckBox approximateCheckBox = new JCheckBox("Approximate");
 
-    private final JTextField outputDirectoryField = new JTextField("output", 20);
+    private final JTextField outputDirectoryField = new JTextField(20);
 
     private final JComboBox<String> previewTypeCombo = new JComboBox<>(new String[]{
             "Disparity",
@@ -98,20 +100,23 @@ public class StereoVisionDemoFrame extends JFrame {
     private BufferedImage currentPreviewImage;
     private String currentPreviewPath;
 
-    public StereoVisionDemoFrame() {
-        this.projectService = new ProjectService();
+    public StereoVisionDemoFrame(UserAccount currentUser) {
+        this.currentUser = currentUser;
+        this.projectService = new ProjectService(currentUser);
         this.reconstructionService = new ReconstructionService();
 
-        setTitle("Stereo Vision 3D Reconstruction System - Demo GUI");
+        setTitle("Stereo Vision 3D Reconstruction System - " + currentUser.getUsername());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(1200, 760));
         setSize(1320, 860);
         setLocationRelativeTo(null);
 
+        outputDirectoryField.setText(projectService.getDefaultOutputDirectory());
         initializeComponents();
         setContentPane(buildContent());
         bindActions();
         reloadProjects(null, null, null);
+        appendStatus("Logged in as " + currentUser.getUsername() + ".");
         appendStatus("GUI ready.");
     }
 

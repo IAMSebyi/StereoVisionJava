@@ -2,26 +2,31 @@ package stereovision;
 
 import stereovision.algorithm.StereoMatcherAlgorithm;
 import stereovision.config.OpenCVLoader;
+import stereovision.gui.LoginDialog;
 import stereovision.gui.StereoVisionDemoFrame;
 import stereovision.model.CameraParameters;
 import stereovision.model.ReconstructionSession;
 import stereovision.model.StereoImagePair;
 import stereovision.model.StereoProject;
+import stereovision.model.UserAccount;
 import stereovision.service.AuditService;
+import stereovision.service.AuthService;
 import stereovision.service.ProjectService;
 import stereovision.service.ReconstructionService;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import java.io.File;
 import java.util.List;
 import java.util.Scanner;
 
 public class Main {
-    private static final ProjectService projectService = new ProjectService();
-    private static final ReconstructionService reconstructionService = new ReconstructionService();
     private static final AuditService auditService = AuditService.getInstance();
+    private static final AuthService authService = new AuthService();
     private static final Scanner scanner = new Scanner(System.in);
+    private static ProjectService projectService;
+    private static ReconstructionService reconstructionService;
 
     public static void main(String[] args) {
         if (args.length == 0 || isGuiFlag(args)) {
@@ -29,16 +34,23 @@ public class Main {
             return;
         }
 
+        UserAccount currentUser = authenticateConsoleUser();
+        if (currentUser == null) {
+            return;
+        }
+
         if (!loadOpenCv(false)) {
             return;
         }
 
+        initializeServices(currentUser);
+
         if (isInteractiveCliFlag(args)) {
-            runInteractiveConsole();
+            runInteractiveConsole(currentUser);
             return;
         }
 
-        runFromCommandLine(args);
+        runFromCommandLine(args, currentUser);
     }
 
     private static boolean isGuiFlag(String[] args) {
@@ -51,13 +63,17 @@ public class Main {
 
     private static void launchGui() {
         applySystemLookAndFeel();
-        if (!loadOpenCv(true)) {
-            return;
-        }
 
         SwingUtilities.invokeLater(() -> {
             try {
-                StereoVisionDemoFrame frame = new StereoVisionDemoFrame();
+                UserAccount currentUser = LoginDialog.authenticate(null, authService);
+                if (currentUser == null) {
+                    return;
+                }
+                if (!loadOpenCv(true)) {
+                    return;
+                }
+                StereoVisionDemoFrame frame = new StereoVisionDemoFrame(currentUser);
                 frame.setVisible(true);
             } catch (RuntimeException exception) {
                 showGuiStartupError("Could not start the GUI.", exception);
@@ -103,7 +119,59 @@ public class Main {
         );
     }
 
-    private static void runInteractiveConsole() {
+    private static void initializeServices(UserAccount currentUser) {
+        projectService = new ProjectService(currentUser);
+        reconstructionService = new ReconstructionService();
+    }
+
+    private static UserAccount authenticateConsoleUser() {
+        while (true) {
+            System.out.println();
+            System.out.println("=== Authentication ===");
+            System.out.println("1. Login");
+            System.out.println("2. Register");
+            System.out.println("3. Exit");
+
+            int option = readInt("Choose an option: ");
+            try {
+                switch (option) {
+                    case 1:
+                        return loginFromConsole();
+                    case 2:
+                        return registerFromConsole();
+                    case 3:
+                        return null;
+                    default:
+                        System.out.println("Invalid option.");
+                }
+            } catch (RuntimeException exception) {
+                System.out.println("Authentication error: " + exception.getMessage());
+            }
+        }
+    }
+
+    private static UserAccount loginFromConsole() {
+        System.out.print("Username: ");
+        String username = scanner.nextLine();
+        System.out.print("Password: ");
+        String password = scanner.nextLine();
+        UserAccount user = authService.login(username, password);
+        System.out.println("Logged in as " + user.getUsername() + ".");
+        return user;
+    }
+
+    private static UserAccount registerFromConsole() {
+        System.out.print("Choose username: ");
+        String username = scanner.nextLine();
+        System.out.print("Choose password: ");
+        String password = scanner.nextLine();
+        UserAccount user = authService.register(username, password);
+        System.out.println("User created. Logged in as " + user.getUsername() + ".");
+        return user;
+    }
+
+    private static void runInteractiveConsole(UserAccount currentUser) {
+        System.out.println("Projects and results are private for user: " + currentUser.getUsername());
         boolean running = true;
         while (running) {
             printMenu();
@@ -338,7 +406,7 @@ public class Main {
         }
     }
 
-    private static void runFromCommandLine(String[] args) {
+    private static void runFromCommandLine(String[] args, UserAccount currentUser) {
         if (args.length < 2 || args.length > 4) {
             printCommandLineUsage();
             return;
@@ -346,7 +414,7 @@ public class Main {
 
         String leftImagePath = args[0];
         String rightImagePath = args[1];
-        String outputDirectory = args.length >= 3 ? args[2] : "output";
+        String outputDirectory = args.length >= 3 ? args[2] : new File("output", currentUser.getUsername()).getPath();
         String algorithmName = args.length >= 4 ? args[3] : "StereoSGBM";
 
         try {
@@ -374,5 +442,6 @@ public class Main {
         System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main");
         System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main --cli");
         System.out.println("  java \"-Djava.library.path=<opencv-native-dir>\" -cp \"<classes>;<opencv-jar>;<sqlite-jdbc-jar>\" stereovision.Main <left-image> <right-image> [output-dir] [StereoBM|StereoSGBM]");
+        System.out.println("The CLI asks for login or registration before opening user data.");
     }
 }

@@ -1,6 +1,7 @@
 package stereovision.config;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -19,10 +20,21 @@ public final class DatabaseInitializer {
             Connection connection = DatabaseConnectionManager.getInstance().getConnection();
             try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS users (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            username TEXT NOT NULL UNIQUE,
+                            password_hash TEXT NOT NULL,
+                            created_at TEXT NOT NULL
+                        )
+                        """);
+
+                statement.executeUpdate("""
                         CREATE TABLE IF NOT EXISTS stereo_projects (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER,
                             name TEXT NOT NULL,
-                            description TEXT NOT NULL
+                            description TEXT NOT NULL,
+                            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
                         )
                         """);
 
@@ -76,11 +88,36 @@ public final class DatabaseInitializer {
                             FOREIGN KEY(pair_id) REFERENCES stereo_image_pairs(id) ON DELETE CASCADE
                         )
                         """);
+
+                ensureProjectUserColumn(connection);
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Could not initialize the database schema.", exception);
         }
 
         initialized = true;
+    }
+
+    private static void ensureProjectUserColumn(Connection connection) throws SQLException {
+        if (tableHasColumn(connection, "stereo_projects", "user_id")) {
+            return;
+        }
+
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate("ALTER TABLE stereo_projects ADD COLUMN user_id INTEGER");
+        }
+    }
+
+    private static boolean tableHasColumn(Connection connection, String tableName, String columnName) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("PRAGMA table_info(" + tableName + ")")) {
+            while (resultSet.next()) {
+                String existingColumnName = resultSet.getString("name");
+                if (columnName.equalsIgnoreCase(existingColumnName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

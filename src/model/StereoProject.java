@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class StereoProject extends BaseEntity implements Comparable<StereoProject> {
+    private int ownerUserId;
     private String name;
     private String description;
     private CameraParameters cameraParameters;
@@ -15,12 +16,21 @@ public class StereoProject extends BaseEntity implements Comparable<StereoProjec
         this.sessions = new ArrayList<>();
     }
 
-    public StereoProject(int id, String name, String description) {
+    public StereoProject(int id, int ownerUserId, String name, String description) {
         super(id);
+        this.ownerUserId = ownerUserId;
         this.name = name;
         this.description = description;
         this.imagePairs = new ArrayList<>();
         this.sessions = new ArrayList<>();
+    }
+
+    public int getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(int ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 
     public String getName() {
@@ -84,6 +94,7 @@ public class StereoProject extends BaseEntity implements Comparable<StereoProjec
     public String toString() {
         return "StereoProject{" +
                 "id=" + id +
+                ", ownerUserId=" + ownerUserId +
                 ", name='" + name + '\'' +
                 ", description='" + description + '\'' +
                 ", cameraParameters=" + cameraParameters +
